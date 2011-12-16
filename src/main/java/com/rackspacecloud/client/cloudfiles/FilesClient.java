@@ -201,6 +201,14 @@ public class FilesClient
         }
     }
 
+    public boolean login() throws IOException, HttpException {
+        if (authenticationURL.endsWith("v1.1") || authenticationURL.endsWith("v1.1/")) {
+            return loginAuthV1_1();
+        } else {
+            return loginAuthV1_0();
+        }
+    }
+
     /**
      * Log in to CloudFiles.  This method performs the authentication and sets up the client's internal state.
      * 
@@ -209,7 +217,7 @@ public class FilesClient
      * @throws IOException   There was an IO error doing network communication
      * @throws HttpException There was an error with the http protocol
      */
-    public boolean login() throws IOException, HttpException
+    public boolean loginAuthV1_0() throws IOException, HttpException
     {
         GetMethod method = new GetMethod(authenticationURL);
         method.getParams().setSoTimeout(connectionTimeOut);
@@ -243,6 +251,46 @@ public class FilesClient
 
         return this.isLoggedin;
     }
+
+    public boolean loginAuthV1_1() throws IOException, HttpException
+    {
+        PostMethod method = new PostMethod(authenticationURL + "/auth");
+        method.getParams().setSoTimeout(connectionTimeOut);
+
+        String body = "<credentials xmlns=\"http://docs.rackspacecloud.com/auth/api/v1.1\" username=\"" + username + "\" " + "key=\"" + password + "\"/>";
+        logger.debug(body);
+
+        StringRequestEntity entity = new StringRequestEntity(body, "text/plain", "UTF-8");
+        method.setRequestEntity(entity);
+        method.setRequestHeader("Content-type", "application/xml; charset=utf-8");
+        method.addRequestHeader("Accept", "application/xml; charset=utf-8");
+
+        client.executeMethod(method);
+
+        AuthResponse response = new AuthResponse(method);
+
+        if (response.loginSuccess())
+        {
+            isLoggedin   = true;
+            if(usingSnet() || envSnet()){
+            	storageURL = snetAddr + response.getStorageURL().substring(8);
+            }
+            else{
+            	storageURL = response.getStorageURL();
+            }
+            cdnManagementURL = response.getCDNManagementURL();
+            authToken = response.getAuthToken();
+            logger.debug("storageURL: " + storageURL);
+            logger.debug("authToken: " + authToken);
+            logger.debug("cdnManagementURL:" + cdnManagementURL);
+            logger.debug("ConnectionManager:" + client.getHttpConnectionManager());
+        }
+        method.releaseConnection();
+
+        return this.isLoggedin;
+    }
+
+
     
     /**
      * List all of the containers available in an account, ordered by container name.
